@@ -1,0 +1,1 @@
+-e "mkdir -p ~/.streamlit/\necho \"\\\n[server]\\n\\\nheadless = true\\n\\\nenableCORS=false\\n\\\nport = \$PORT\\n\\\n\" > ~/.streamlit/config.toml" 
