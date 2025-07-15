@@ -1,0 +1,10 @@
+.env
+.env.txt
+.streamlit/
+*.lnk
+*.txt  # Ignores duplicates like app.py.txt
+desktop.ini
+_netrc
+.gitconfig
+.lesshst
+heroku/
