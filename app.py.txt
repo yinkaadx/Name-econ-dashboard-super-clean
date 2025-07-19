@@ -45,7 +45,7 @@ indicators = {
     'Asset Returns S&P': {'func': lambda: yf.Ticker('^GSPC').history(period='1d')['Close'][0], 'thresh': np.nan, 'desc': 'gains steady heal'},
 
     # Geo cycles
-    'GDP per Capita': {'func': lambda: wbdata.get_series('NY.GDP.PCAP.CD')['USA'], 'thresh': np.nan, 'desc': 'income head living rise'},  # Example for USA
+    'GDP per Capita': {'func': lambda: wbdata.get_dataframe(indicators={'NY.GDP.PCAP.CD': 'GDP per Capita'}, country='US')['GDP per Capita'].iloc[-1], 'thresh': np.nan, 'desc': 'income head living rise'},  # Fixed for USA latest
     'Military Spend': {'func': lambda: scrape_sipri_military(), 'thresh': np.nan, 'desc': 'arms costly drain'},
     'Corruption Index': {'func': lambda: scrape_transparency_cpi(), 'thresh': np.nan, 'desc': 'graft erode buy rot'},
     'Power Index': {'func': lambda: scrape_globalfirepower_index(), 'thresh': np.nan, 'desc': 'composite strength peak/drop'},
