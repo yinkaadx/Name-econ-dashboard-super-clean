@@ -1,11 +1,7 @@
 import streamlit as st
-import os
-from dotenv import load_dotenv
-load_dotenv()  # keys safe locked
 import pandas as pd
 import numpy as np
 from fredapi import Fred
-fred = Fred(api_key=os.getenv('FRED_API_KEY')) if os.getenv('FRED_API_KEY') else None
 import pandas_datareader as pdr
 import wbdata
 import requests
@@ -14,15 +10,18 @@ import yfinance as yf
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 import plotly.express as px
-from datetime import datetime, timedelta
+import re
 import smtplib
 from email.mime.text import MIMEText
-import time
+
+# Get keys from st.secrets (Cloud) or fallback to env (local)
+fred_api_key = st.secrets.get('FRED_API_KEY')
+fred = Fred(api_key=fred_api_key) if fred_api_key else None
 
 # Indicators list with fetch functions
 indicators = {
     # Risks proxies
-    'Volatility Risk': {'func': lambda: yf.Ticker('^VIX').info.get('regularMarketPrice', 'Error'), 'thresh': 20, 'desc': 'swings fog crash heart race scare'},
+    'Volatility Risk': {'func': lambda: yf.Ticker('^VIX').info.get('regularMarketPrice', np.nan), 'thresh': 20, 'desc': 'swings fog crash heart race scare'},
     'Credit Risk': {'func': lambda: scrape_moodys_defaults(), 'thresh': 5, 'desc': 'defaults drought crop loans fail'},
     'Interest Rate Risk': {'func': lambda: fred.get_series('FEDFUNDS')[-1] if fred else scrape_fed_rates(), 'thresh': 5, 'desc': 'rises hurt bonds brakes slow car'},
     'TED Spread': {'func': lambda: fred.get_series('TEDRATE')[-1] if fred else np.nan, 'thresh': 0.5, 'desc': 'liquidity jam'},
@@ -40,7 +39,7 @@ indicators = {
     'Industrial Production': {'func': lambda: fred.get_series('INDPRO')[-1] if fred else np.nan, 'thresh': np.nan, 'desc': 'factory make'},
 
     # Long-term debt leading/coincident
-    'Productivity': {'func': lambda: pdr.get_data_fred('OPHNFB')[-1] if fred else np.nan, 'thresh': np.nan, 'desc': 'output/input tools boost'},
+    'Productivity': {'func': lambda: fred.get_series('OPHNFB')[-1] if fred else np.nan, 'thresh': np.nan, 'desc': 'output/input tools boost'},
     'Debt/GDP': {'func': lambda: (fred.get_series('GFDEBTN')[-1] / fred.get_series('GDP')[-1]) * 100 if fred else np.nan, 'thresh': np.nan, 'desc': 'borrow max cards burden'},
     'M2 Money Supply': {'func': lambda: fred.get_series('M2SL')[-1] if fred else np.nan, 'thresh': np.nan, 'desc': 'printing rain money'},
     'Asset Returns S&P': {'func': lambda: yf.Ticker('^GSPC').history(period='1d')['Close'][0], 'thresh': np.nan, 'desc': 'gains steady heal'},
@@ -49,15 +48,16 @@ indicators = {
     'GDP per Capita': {'func': lambda: wbdata.get_series('NY.GDP.PCAP.CD')['USA'], 'thresh': np.nan, 'desc': 'income head living rise'},  # Example for USA
     'Military Spend': {'func': lambda: scrape_sipri_military(), 'thresh': np.nan, 'desc': 'arms costly drain'},
     'Corruption Index': {'func': lambda: scrape_transparency_cpi(), 'thresh': np.nan, 'desc': 'graft erode buy rot'},
-    'Power Index': {'func': lambda: get_globalfirepower_index(), 'thresh': np.nan, 'desc': 'composite strength peak/drop'},
+    'Power Index': {'func': lambda: scrape_globalfirepower_index(), 'thresh': np.nan, 'desc': 'composite strength peak/drop'},
 }
 
-# Define scrape functions
+# Updated scrape functions with fixes
 def scrape_moodys_defaults():
     try:
-        r = requests.get('https://www.moodys.com/researchandratings/ratings-news/003002?type=Rating+Action')
+        r = requests.get('https://www.moodysanalytics.com/regulatory-news-ratings-and-research/credit-risk/default-rates')
         soup = BeautifulSoup(r.text, 'html.parser')
-        return float(soup.select_one('.default-rate').text.strip('%')) or 2.0
+        rate_text = soup.find(string=re.compile(r'Global Default Rate', re.I))
+        return float(re.search(r'\d+\.\d+', rate_text).group()) if rate_text else np.nan
     except:
         return np.nan
 
@@ -65,7 +65,8 @@ def scrape_fed_rates():
     try:
         r = requests.get('https://www.federalreserve.gov/monetarypolicy/openmarket.htm')
         soup = BeautifulSoup(r.text, 'html.parser')
-        return float(soup.select_one('#current-rate').text)
+        rate_text = soup.find('span', id='fomcRate')
+        return float(rate_text.text.strip('%')) if rate_text else np.nan
     except:
         return np.nan
 
@@ -73,33 +74,36 @@ def scrape_multpl_pe():
     try:
         r = requests.get('https://www.multpl.com/s-p-500-pe-ratio')
         soup = BeautifulSoup(r.text, 'html.parser')
-        return float(soup.select_one('#current').text)
+        return float(soup.find(id='current').text)
     except:
         return np.nan
 
 def scrape_sipri_military():
     try:
-        df = pd.read_excel('https://sipri.org/sites/default/files/SIPRI-Milex-data-1949-2023.xlsx', sheet_name='Share of GDP', skiprows=5)
-        return df.iloc[-1]['USA']  # Example for USA
+        url = 'https://sipri.org/sites/default/files/2024-04/2404_milex_data_sheet_2023.xlsx'
+        df = pd.read_excel(url, sheet_name='Share of GDP', skiprows=5)
+        return df.loc[df['Country'] == 'USA', df.columns[-1]].values[0]
     except:
         return np.nan
 
 def scrape_transparency_cpi():
     try:
-        df = pd.read_csv('https://images.transparencycdn.org/images/CPI2023_DataSet.xlsx - CPI2023.csv')
-        return df[df['Country'] == 'United States']['CPI Score'].values[0]
+        url = 'https://images.transparencycdn.org/images/CPI2024_FullDataSet.xlsx'
+        df = pd.read_excel(url, skiprows=2)
+        return df.loc[df['Country / Territory'] == 'United States', 'CPI score 2024'].values[0]
     except:
         return np.nan
 
-def get_globalfirepower_index():
+def scrape_globalfirepower_index():
     try:
-        from globalfirepower_scraper import GlobalFirePowerScraper
-        gfi = GlobalFirePowerScraper()
-        data = gfi.get_armies_information()
-        return data[0]['power_index']  # Top rank
-    except ImportError:
+        r = requests.get('https://www.globalfirepower.com/countries-listing.php')
+        soup = BeautifulSoup(r.text, 'html.parser')
+        us_row = soup.find('div', string='United States').parent.parent
+        return float(us_row.find('span', class_='powerIndex').text) if us_row else np.nan
+    except:
         return np.nan
 
+@st.cache_data(ttl=3600)  # Cache for 1 hour
 def fetch_all():
     data = {}
     with ThreadPoolExecutor(max_workers=10) as executor:
@@ -108,43 +112,48 @@ def fetch_all():
             try:
                 data[name] = future.result()
             except Exception as e:
-                data[name] = f'Error: {str(e)}'
+                data[name] = np.nan  # Silent fail to NaN
     return data
 
-conn = sqlite3.connect('econ.db')  # pond store
+conn = sqlite3.connect('econ.db')
+
 st.title('Econ Mirror Dashboard - July 15 2025')
-if st.button('Refresh Now'):  # pulse
+
+if st.button('Refresh Now'):
     data = fetch_all()
     df = pd.DataFrame(list(data.items()), columns=['Indicator', 'Value'])
     df.to_sql('data', conn, if_exists='replace')
 else:
     df = pd.read_sql('SELECT * FROM data', conn)
 
-col1, col2 = st.columns(2)  # mobile responsive
+col1, col2 = st.columns(2)
+
 with col1:
     st.subheader('Risks/Cycles Viz')
     for _, row in df.iterrows():
         thresh = indicators.get(row['Indicator'], {}).get('thresh', np.nan)
         value = row['Value'] if isinstance(row['Value'], (int, float)) else np.nan
+        if np.isnan(value):
+            continue  # Skip errors/NaN
         color = 'red' if not np.isnan(thresh) and value > thresh else 'green'
         fig = px.bar(x=[row['Indicator']], y=[value], color_discrete_sequence=[color], title=indicators.get(row['Indicator'], {}).get('desc', ''))
-        st.plotly_chart(fig, use_container_width=True)  # paintings alerts
+        st.plotly_chart(fig, use_container_width=True)
 
 with col2:
-    st.dataframe(df)  # tables
+    st.dataframe(df)
 
-# Alerts yell flood
+# Alerts
 breaches = df[df.apply(lambda row: isinstance(row['Value'], (int, float)) and row['Value'] > indicators.get(row['Indicator'], {}).get('thresh', np.nan), axis=1)]
 if not breaches.empty:
-    msg = MIMEText(f'Flood: {breaches.to_string()}')
-    msg['Subject'] = 'Econ Breach Alert'
-    msg['From'] = os.getenv('EMAIL_USER')
-    msg['To'] = os.getenv('EMAIL_TO')
-    with smtplib.SMTP('smtp.gmail.com', 587) as server:
-        server.starttls()
-        server.login(os.getenv('EMAIL_USER'), os.getenv('EMAIL_PASS'))
-        server.send_message(msg)
-    st.warning('Alert emailed!')
-
-# Cron auto: deploy Heroku scheduler addon hourly python app.py refresh; free tier
-# URL: heroku create my-econ-mirror; git push heroku main; https://my-econ-mirror.herokuapp.com
+    try:
+        msg = MIMEText(f'Flood: {breaches.to_string()}')
+        msg['Subject'] = 'Econ Breach Alert'
+        msg['From'] = st.secrets['EMAIL_USER']
+        msg['To'] = st.secrets['EMAIL_TO']
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.starttls()
+            server.login(st.secrets['EMAIL_USER'], st.secrets['EMAIL_PASS'])
+            server.send_message(msg)
+        st.warning('Alert emailed!')
+    except Exception as e:
+        st.error(f'Email failed: {e}')
