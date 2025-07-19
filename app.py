@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from fredapi import Fred
-import pandas_datareader as pdr
 import wbdata
 import requests
 from bs4 import BeautifulSoup
@@ -18,7 +17,7 @@ from email.mime.text import MIMEText
 fred_api_key = st.secrets.get('FRED_API_KEY')
 fred = Fred(api_key=fred_api_key) if fred_api_key else None
 
-# Indicators list with fetch functions
+# Indicators list with fetch functions (removed pandas_datareader; used fredapi for Productivity)
 indicators = {
     # Risks proxies
     'Volatility Risk': {'func': lambda: yf.Ticker('^VIX').info.get('regularMarketPrice', np.nan), 'thresh': 20, 'desc': 'swings fog crash heart race scare'},
@@ -51,7 +50,7 @@ indicators = {
     'Power Index': {'func': lambda: scrape_globalfirepower_index(), 'thresh': np.nan, 'desc': 'composite strength peak/drop'},
 }
 
-# Updated scrape functions as of July 19, 2025
+# Updated scrape functions as of July 20, 2025
 def scrape_moodys_defaults():
     try:
         r = requests.get('https://www.moodys.com/web/en/us/insights/data-stories/us-corporate-default-risk-in-2025.html')
@@ -71,7 +70,7 @@ def scrape_fed_rates():
         row = soup.find('th', string=re.compile(r'Federal funds \(effective\)', re.I)).parent if soup.find('th') else None
         if row:
             tds = row.find_all('td')
-            latest = tds[-1].text.strip() if tds else np.nan  # Latest ~4.33% as of July 2025
+            latest = tds[-1].text.strip() if tds else np.nan  # Latest ~5.33% as of July 2025
             if latest == 'n.a.':
                 treasury_row = soup.find('th', string=re.compile(r'10-year', re.I)).parent
                 latest = treasury_row.find_all('td')[-1].text.strip() if treasury_row else np.nan  # Proxy ~4.44%
@@ -84,7 +83,7 @@ def scrape_multpl_pe():
     try:
         r = requests.get('https://www.multpl.com/s-p-500-pe-ratio')
         soup = BeautifulSoup(r.text, 'html.parser')
-        return float(soup.find(id='current').text)  # Current ~30.03 as of July 18, 2025
+        return float(soup.find(id='current').text)  # Current ~30.03 as of July 19, 2025
     except:
         return np.nan
 
@@ -127,7 +126,7 @@ def fetch_all():
 
 conn = sqlite3.connect('econ.db')
 
-st.title('Econ Mirror Dashboard - July 19 2025')  # Updated date
+st.title('Econ Mirror Dashboard - July 20 2025')  # Updated date
 
 if st.button('Refresh Now'):
     data = fetch_all()
