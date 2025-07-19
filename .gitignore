@@ -1,1 +1,12 @@
-".env" 
+".env" # Ignore Node.js dependencies
+node_modules/
+heroku/client/node_modules/
+.yarn/
+
+# Ignore Windows system files
+desktop.ini
+Thumbs.db
+
+# Ignore other junk (if you have CSVs or env)
+.env
+data/*.csv  # If you have local CSVs, add this
