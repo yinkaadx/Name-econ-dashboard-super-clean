@@ -1,0 +1,6 @@
+import streamlit as st
+
+st.title('Test Dashboard - Loading Check')
+st.write('If you see this, the page is loading successfully! Click below to test button.')
+if st.button('Test Button'):
+    st.success('Button works - no errors!')
