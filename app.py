@@ -126,24 +126,20 @@ def fetch_all():
 
 conn = sqlite3.connect('econ.db')
 
-# Create table if not exists
-cursor = conn.cursor()
-cursor.execute("CREATE TABLE IF NOT EXISTS data (Indicator TEXT PRIMARY KEY, Value REAL)")
-conn.commit()
-
-st.title('Econ Mirror Dashboard - July 19 2025')  # Updated date
+st.title('Econ Mirror Dashboard - July 22 2025')
+st.set_page_config(layout="wide", initial_sidebar_state="expanded")
 
 if st.button('Refresh Now'):
     data = fetch_all()
     df = pd.DataFrame(list(data.items()), columns=['Indicator', 'Value'])
-    df.to_sql('data', conn, if_exists='replace', index=False)
+    df.to_sql('data', conn, if_exists='replace')
 else:
     try:
         df = pd.read_sql('SELECT * FROM data', conn)
-    except pd.errors.DatabaseError:
+    except:
         data = fetch_all()
         df = pd.DataFrame(list(data.items()), columns=['Indicator', 'Value'])
-        df.to_sql('data', conn, if_exists='replace', index=False)
+        df.to_sql('data', conn, if_exists='replace')
 
 col1, col2 = st.columns(2)
 
