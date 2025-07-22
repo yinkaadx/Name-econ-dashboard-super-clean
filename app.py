@@ -12,6 +12,7 @@ import plotly.express as px
 import re
 import smtplib
 from email.mime.text import MIMEText
+import json
 
 # Get keys from st.secrets (Cloud) or fallback to env (local)
 fred_api_key = st.secrets.get('FRED_API_KEY')
@@ -42,14 +43,14 @@ indicators = {
     'Education Investment': {'func': lambda: [wbdata.get_series('SE.XPD.TOTL.GD.ZS')['USA'] - 1, wbdata.get_series('SE.XPD.TOTL.GD.ZS')['USA'], np.nan], 'thresh': 5, 'desc': 'Education % GDP - >5% means investment', 'unit': '%'},
     'Fiscal Deficits': {'func': lambda: [fred.get_series('MTSDS133FMS')[-12] if fred else np.nan, fred.get_series('MTSDS133FMS')[-1] if fred else np.nan, np.nan], 'thresh': 6, 'desc': 'Deficit % GDP - >6% means high spending', 'unit': '%'},
     'Foreign Reserves': {'func': lambda: [fred.get_series('TRESEGT')[-12] if fred else np.nan, fred.get_series('TRESEGT')[-1] if fred else np.nan, np.nan], 'thresh': np.nan, 'desc': 'Foreign reserves - falling means vulnerability', 'unit': 'Billion $'},
-    'GDP': {'func': lambda: [fred.get_series('GDP')[-12] if fred else np.nan, fred.get_series('GDP')[-1] if fred else np.nan, 31000], 'thresh': np.nan, 'desc': 'Total economic output - high is good growth', 'unit': 'Billion $'},
+    'GDP': {'func': lambda: [fred.get_series('GDP')[-12] if fred else np.nan, fred.get_series('GDP')[-1] if fred else np.nan, np.nan], 'thresh': np.nan, 'desc': 'Total economic output - high is good growth', 'unit': 'Billion $'},
     'GDP Gap': {'func': lambda: [fred.get_series('GDPPOT')[-12] - fred.get_series('GDP')[-12] if fred else np.nan, fred.get_series('GDPPOT')[-1] - fred.get_series('GDP')[-1] if fred else np.nan, np.nan], 'thresh': 0, 'desc': 'Gap to potential GDP - positive means room to grow', 'unit': 'Billion $'},
     'GDP Share': {'func': lambda: [wbdata.get_series('NY.GDP.MKTP.CD')['USA'] / wbdata.get_series('NY.GDP.MKTP.CD')['WLD'] * 100 - 1, wbdata.get_series('NY.GDP.MKTP.CD')['USA'] / wbdata.get_series('NY.GDP.MKTP.CD')['WLD'] * 100, np.nan], 'thresh': np.nan, 'desc': 'US GDP as % of world - high means global dominance', 'unit': '%'},
-    'GDP per Capita': {'func': lambda: [70000, 76399, 80000], 'thresh': np.nan, 'desc': 'Income per person - rising means better living standards', 'unit': '$'},
+    'GDP per Capita': {'func': lambda: [wbdata.get_series('NY.GDP.PCAP.CD')['USA'] - 1, wbdata.get_series('NY.GDP.PCAP.CD')['USA'], np.nan], 'thresh': np.nan, 'desc': 'Income per person - rising means better living standards', 'unit': '$'},
     'Growth = productivity': {'func': lambda: [fred.get_series('OPHNFB')[-12] if fred else np.nan, fred.get_series('OPHNFB')[-1] if fred else np.nan, np.nan], 'thresh': np.nan, 'desc': 'Growth matching productivity - stable means balanced', 'unit': '%'},
     'Growth > rates': {'func': lambda: [fred.get_series('GDP')[-12] - fred.get_series('FEDFUNDS')[-12] if fred else np.nan, fred.get_series('GDP')[-1] - fred.get_series('FEDFUNDS')[-1] if fred else np.nan, np.nan], 'thresh': 2, 'desc': 'GDP > nominal rates - >2% means healthy', 'unit': '%'},
     'High leverage': {'func': lambda: [fred.get_series('NFSDB')[-12] / fred.get_series('GDP')[-12] * 100 if fred else np.nan, fred.get_series('NFSDB')[-1] / fred.get_series('GDP')[-1] * 100 if fred else np.nan, np.nan], 'thresh': 80, 'desc': 'Household debt % GDP - >80% means high leverage', 'unit': '%'},
-    'Inflation Rate': {'func': lambda: [fred.get_series('CPIAUCSL')[-12] if fred else np.nan, fred.get_series('CPIAUCSL')[-1] if fred else np.nan, 2.5], 'thresh': 3, 'desc': 'Price rise % - high erodes money value', 'unit': '%'},
+    'Inflation Rate': {'func': lambda: [fred.get_series('CPIAUCSL')[-12] if fred else np.nan, fred.get_series('CPIAUCSL')[-1] if fred else np.nan, np.nan], 'thresh': 3, 'desc': 'Price rise % - high erodes money value', 'unit': '%'},
     'Internal Conflicts': {'func': lambda: [scrape_conflicts_index() - 5, scrape_conflicts_index(), np.nan], 'thresh': 20, 'desc': 'Protest count - >20 means unrest', 'unit': 'Count'},
     'Inventory Levels': {'func': lambda: [fred.get_series('ISRATIO')[-12] if fred else np.nan, fred.get_series('ISRATIO')[-1] if fred else np.nan, np.nan], 'thresh': np.nan, 'desc': 'Inventory to sales ratio - low means high demand', 'unit': 'Ratio'},
     'Leading Economic Index (LEI)': {'func': lambda: [fred.get_series('USSLIND')[-12] if fred else np.nan, fred.get_series('USSLIND')[-1] if fred else np.nan, np.nan], 'thresh': np.nan, 'desc': 'LEI index - falling signals downturn', 'unit': 'Index'},
@@ -82,7 +83,7 @@ indicators = {
     'Yield Curve Slope': {'func': lambda: [fred.get_series('T10Y2Y')[-12] if fred else np.nan, fred.get_series('T10Y2Y')[-1] if fred else np.nan, np.nan], 'thresh': 0, 'desc': '10Y-2Y yield spread - negative signals recession', 'unit': '%'},
 }
 
-# Additional scrapers (all verified working)
+# Additional scrapers
 def scrape_wef_competitiveness():
     try:
         r = requests.get('https://www.weforum.org/reports/global-competitiveness-report-2025')
@@ -194,19 +195,25 @@ def fetch_all():
 
 conn = sqlite3.connect('econ.db')
 
+# Create table if not exists
+cursor = conn.cursor()
+cursor.execute("CREATE TABLE IF NOT EXISTS data (Indicator TEXT PRIMARY KEY, Value TEXT)")
+conn.commit()
+
 st.title('Econ Mirror Dashboard - July 22 2025')
 st.set_page_config(layout="wide", initial_sidebar_state="expanded")
 
 if st.button('Refresh Now'):
     data = fetch_all()
-    df = pd.DataFrame(list(data.items()), columns=['Indicator', 'Value'])
+    df = pd.DataFrame([{'Indicator': name, 'Value': json.dumps(value)} for name, value in data.items()])
     df.to_sql('data', conn, if_exists='replace', index=False)
 else:
     try:
         df = pd.read_sql('SELECT * FROM data', conn)
-    except Exception as e:
+        df['Value'] = df['Value'].apply(json.loads)
+    except:
         data = fetch_all()
-        df = pd.DataFrame(list(data.items()), columns=['Indicator', 'Value'])
+        df = pd.DataFrame([{'Indicator': name, 'Value': json.dumps(value)} for name, value in data.items()])
         df.to_sql('data', conn, if_exists='replace', index=False)
 
 col1, col2 = st.columns(2)
@@ -214,19 +221,20 @@ col1, col2 = st.columns(2)
 with col1:
     st.subheader('Risks/Cycles Viz')
     for _, row in df.iterrows():
+        value = row['Value'][1] if isinstance(row['Value'], list) else np.nan  # Current value
         thresh = indicators.get(row['Indicator'], {}).get('thresh', np.nan)
-        value = row['Value'] if isinstance(row['Value'], (int, float)) else np.nan
         if np.isnan(value):
-            continue  # Skip errors/NaN
+            continue
         color = 'red' if not np.isnan(thresh) and value > thresh else 'green'
-        fig = px.bar(x=[row['Indicator']], y=[value], color_discrete_sequence=[color], title=indicators.get(row['Indicator'], {}).get('desc', ''))
+        fig = px.bar(x=['Previous', 'Current', 'Forecast'], y=row['Value'], title=indicators.get(row['Indicator'], {}).get('desc', ''))
+        fig.update_layout(barmode='group')
         st.plotly_chart(fig, use_container_width=True)
 
 with col2:
     st.dataframe(df)
 
 # Alerts
-breaches = df[df.apply(lambda row: isinstance(row['Value'], (int, float)) and row['Value'] > indicators.get(row['Indicator'], {}).get('thresh', np.nan), axis=1)]
+breaches = df[df.apply(lambda row: isinstance(row['Value'][1], (int, float)) and row['Value'][1] > indicators.get(row['Indicator'], {}).get('thresh', np.nan), axis=1)]
 if not breaches.empty:
     try:
         msg = MIMEText(f'Flood: {breaches.to_string()}')
