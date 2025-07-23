@@ -10,8 +10,6 @@ import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 import plotly.express as px
 import re
-import smtplib
-from email.mime.text import MIMEText
 import json
 
 # Get keys from st.secrets (Cloud) or fallback to env (local)
@@ -204,7 +202,7 @@ cursor = conn.cursor()
 cursor.execute("CREATE TABLE IF NOT EXISTS data (Indicator TEXT PRIMARY KEY, Value TEXT)")
 conn.commit()
 
-st.title('Econ Mirror Dashboard - July 23, 2025, 07:55 PM +04')
+st.title('Econ Mirror Dashboard - July 23, 2025, 08:14 PM +04')
 st.set_page_config(layout="wide", initial_sidebar_state="expanded")
 
 if st.button('Refresh Now'):
@@ -246,19 +244,3 @@ with col1:
 with col2:
     st.subheader('Indicators Table')
     st.dataframe(df_expanded)
-
-# Alerts
-breaches = df_expanded[df_expanded.apply(lambda row: isinstance(row['Current'], (int, float)) and row['Current'] > row['Threshold'], axis=1)]
-if not breaches.empty:
-    try:
-        msg = MIMEText(f'Flood: {breaches.to_string()}')
-        msg['Subject'] = 'Econ Breach Alert'
-        msg['From'] = st.secrets['EMAIL_USER']
-        msg['To'] = st.secrets['EMAIL_TO']
-        with smtplib.SMTP('smtp.gmail.com', 587) as server:
-            server.starttls()
-            server.login(st.secrets['EMAIL_USER'], st.secrets['EMAIL_PASS'])
-            server.send_message(msg)
-        st.warning('Alert emailed!')
-    except Exception as e:
-        st.error(f'Email failed: {e}')
