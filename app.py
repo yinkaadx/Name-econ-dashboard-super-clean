@@ -204,7 +204,7 @@ cursor = conn.cursor()
 cursor.execute("CREATE TABLE IF NOT EXISTS data (Indicator TEXT PRIMARY KEY, Value TEXT)")
 conn.commit()
 
-st.title('Econ Mirror Dashboard - July 22, 2025, 06:48 PM +04')
+st.title('Econ Mirror Dashboard - July 23, 2025, 07:55 PM +04')
 st.set_page_config(layout="wide", initial_sidebar_state="expanded")
 
 if st.button('Refresh Now'):
@@ -235,13 +235,13 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.subheader('Indicators Visualization')
-    for _, row in df_expanded.iterrows():
+    for index, row in df_expanded.iterrows():
         if not np.isnan(row['Current']):
             values = [row['Previous'], row['Current'], row['Forecast']]
             fig = px.bar(x=['Previous', 'Current', 'Forecast'], y=values, title=row['Description'],
                          color_discrete_sequence=['blue', 'green', 'orange'] if not np.isnan(row['Threshold']) and row['Current'] <= row['Threshold'] else ['blue', 'red', 'orange'])
             fig.update_traces(hovertemplate='Value: %{y} %{text}<extra></extra>', text=[f"{v} {row['Unit']}" if not np.isnan(v) else 'N/A' for v in values])
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, key=f"plotly_chart_{row['Indicator']}_{index}")
 
 with col2:
     st.subheader('Indicators Table')
