@@ -25,10 +25,10 @@ indicators = {
     'LEI': {'func': lambda: [fred.get_series('USSLIND').iloc[-12] if fred else np.nan, fred.get_series('USSLIND').iloc[-1] if fred else np.nan, np.nan], 'thresh': np.nan, 'desc': 'Leading Economic Index - falling signals downturn', 'unit': 'Index'},
     'GDP': {'func': lambda: [fred.get_series('GDP').iloc[-12] if fred else np.nan, fred.get_series('GDP').iloc[-1] if fred else np.nan, 31000], 'thresh': np.nan, 'desc': 'Total economic output - high is good growth', 'unit': 'Billion $'},
     'Capacity Utilization': {'func': lambda: [fred.get_series('CAPUTLB50001S').iloc[-12] if fred else np.nan, fred.get_series('CAPUTLB50001S').iloc[-1] if fred else np.nan, np.nan], 'thresh': 80, 'desc': 'Factory usage % - >80% means overheating', 'unit': '%'},
-    'Inflation': {'func': lambda: [((fred.get_series('CPIAUCSL').iloc[-12] - fred.get_series('CPIAUCSL').iloc[-24]) / fred.get_series('CPIAUCSL').iloc[-24] * 100) if fred else np.nan, ((fred.get_series('CPIAUCSL').iloc[-1] - fred.get_series('CPIAUCSL').iloc[-13]) / fred.get_series('CPIAUCSL').iloc[-13] * 100) if fred else np.nan, 2.7], 'thresh': 3, 'desc': 'YoY price rise % - high erodes money value', 'unit': '%'},
+    'Inflation': {'func': lambda: [fred.get_series('CPIAUCSL').iloc[-12] if fred else np.nan, fred.get_series('CPIAUCSL').iloc[-1] if fred else np.nan, 2.5], 'thresh': 3, 'desc': 'Price rise % - high erodes money value', 'unit': '%'},
     'Retail Sales': {'func': lambda: [fred.get_series('RSXFS').iloc[-12] if fred else np.nan, fred.get_series('RSXFS').iloc[-1] if fred else np.nan, np.nan], 'thresh': 3, 'desc': 'Retail sales % change - >3% means strong shoppers', 'unit': '%'},
     'Nonfarm Payrolls': {'func': lambda: [fred.get_series('PAYEMS').iloc[-13] - fred.get_series('PAYEMS').iloc[-14] if fred else np.nan, fred.get_series('PAYEMS').iloc[-2] - fred.get_series('PAYEMS').iloc[-3] if fred else np.nan, np.nan], 'thresh': 150000, 'desc': 'Monthly job adds - >150K is strong', 'unit': 'Thousands'},
-    'Wage Growth': {'func': lambda: [((fred.get_series('AHETPI').iloc[-1] - fred.get_series('AHETPI').iloc[-13]) / fred.get_series('AHETPI').iloc[-13] * 100) if fred else np.nan, ((fred.get_series('AHETPI').iloc[-1] - fred.get_series('AHETPI').iloc[-13]) / fred.get_series('AHETPI').iloc[-13] * 100) if fred else np.nan, np.nan], 'thresh': 3, 'desc': 'Hourly earnings growth - >3% means rising pay', 'unit': '%'},
+    'Wage Growth': {'func': lambda: [fred.get_series('AHETPI').iloc[-12] if fred else np.nan, fred.get_series('AHETPI').iloc[-1] if fred else np.nan, np.nan], 'thresh': 3, 'desc': 'Hourly earnings growth - >3% means rising pay', 'unit': '%'},
     'P/E Ratios': {'func': lambda: [scrape_multpl_pe() - 5, scrape_multpl_pe(), np.nan], 'thresh': 25, 'desc': 'Stock price to earnings - >25 means overvalued', 'unit': 'Ratio'},
     'Credit Growth': {'func': lambda: [fred.get_series('TOTALSL').iloc[-12] - fred.get_series('TOTALSL').iloc[-24] if fred else np.nan, fred.get_series('TOTALSL').iloc[-1] - fred.get_series('TOTALSL').iloc[-13] if fred else np.nan, np.nan], 'thresh': 5, 'desc': 'Credit expansion % - >5% means loose lending', 'unit': '%'},
     'Fed Funds Futures': {'func': lambda: [np.nan, scrape_fed_rates(), np.nan], 'thresh': np.nan, 'desc': 'Future Fed funds rate expectations', 'unit': '%'},
@@ -54,7 +54,7 @@ indicators = {
     'Education Investment': {'func': lambda: [wbdata.get_series('SE.XPD.TOTL.GD.ZS')['USA'] - 1 if wbdata.get_series('SE.XPD.TOTL.GD.ZS')['USA'] else np.nan, wbdata.get_series('SE.XPD.TOTL.GD.ZS')['USA'], np.nan], 'thresh': 5, 'desc': 'Education % GDP - >5% means investment', 'unit': '%'},
     'R&D Patents': {'func': lambda: [wbdata.get_series('IP.PAT.RESD')['USA'] - 1000, wbdata.get_series('IP.PAT.RESD')['USA'], np.nan], 'thresh': np.nan, 'desc': 'Patents filed - high means innovation', 'unit': 'Count'},
     'Competitiveness Index': {'func': lambda: [np.nan, scrape_wef_competitiveness(), np.nan], 'thresh': np.nan, 'desc': 'Global competitiveness score - high means strong economy', 'unit': 'Score (0-100)'},
-    'GDP per Capita Growth': {'func': lambda: [wbdata.get_series('NY.GDP.PCAP.KD.ZG')['USA'] - 1, wbdata.get_series('NY.GDP.PCAP.KD.ZG')['USA'], np.nan], 'thresh': np.nan, 'desc': 'Annual GDP per capita growth rate', 'unit': '%'},
+    'GDP per Capita Growth': {'func': lambda: [np.nan, wbdata.get_series('NY.GDP.PCAP.KD.ZG')['USA'], np.nan], 'thresh': np.nan, 'desc': 'Annual GDP per capita growth rate', 'unit': '%'},
     'Trade Share': {'func': lambda: [wbdata.get_series('NE.TRD.GNFS.ZS')['USA'] - 1, wbdata.get_series('NE.TRD.GNFS.ZS')['USA'], np.nan], 'thresh': 15, 'desc': 'Trade % of GDP - >15% means dominance', 'unit': '%'},
     'Military Spending': {'func': lambda: [scrape_sipri_military() - 0.5, scrape_sipri_military(), np.nan], 'thresh': 4, 'desc': 'Military % GDP - >4% means strain', 'unit': '%'},
     'Internal Conflicts': {'func': lambda: [scrape_conflicts_index() - 5, scrape_conflicts_index(), np.nan], 'thresh': 20, 'desc': 'Protest count - >20 means unrest', 'unit': 'Count'},
@@ -170,64 +170,50 @@ def scrape_globalfirepower_index():
 def fetch_all():
     data = {}
     with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = {name: executor.submit(lambda: ind['func']()) for name, ind in indicators.items()}
+        futures = {name: executor.submit(ind['func']) for name, ind in indicators.items()}
         for name, future in futures.items():
             try:
-                result = future.result()
-                if isinstance(result, list):
-                    data[name] = result
-                else:
-                    data[name] = [np.nan, result, np.nan]  # Default to [previous, current, forecast] format
+                data[name] = future.result()
             except Exception as e:
-                data[name] = [np.nan, np.nan, np.nan]  # Silent fail to NaN list
+                data[name] = np.nan  # Silent fail to NaN
     return data
 
 conn = sqlite3.connect('econ.db')
 
-# Create table if not exists
-cursor = conn.cursor()
-cursor.execute("CREATE TABLE IF NOT EXISTS data (Indicator TEXT PRIMARY KEY, Value TEXT)")
-conn.commit()
-
-st.title('Econ Mirror Dashboard - July 23, 2025, 09:26 PM +04')
+st.title('Econ Mirror Dashboard - July 24, 2025')
 st.set_page_config(layout="wide", initial_sidebar_state="expanded")
 
-if st.button('Refresh Now'):
-    data = fetch_all()
-    df = pd.DataFrame([{'Indicator': name, 'Value': json.dumps(value)} for name, value in data.items()])
-    df.to_sql('data', conn, if_exists='replace', index=False)
-else:
-    try:
-        df = pd.read_sql('SELECT * FROM data', conn)
-        df['Value'] = df['Value'].apply(lambda x: json.loads(x) if pd.notna(x) else [np.nan, np.nan, np.nan])
-    except Exception as e:
+tab1, tab2 = st.tabs(["Indicators", "Risks"])
+
+with tab1:
+    if st.button('Refresh Now'):
         data = fetch_all()
-        df = pd.DataFrame([{'Indicator': name, 'Value': json.dumps(value)} for name, value in data.items()])
+        df = pd.DataFrame(list(data.items()), columns=['Indicator', 'Value'])
         df.to_sql('data', conn, if_exists='replace', index=False)
+    else:
+        try:
+            df = pd.read_sql('SELECT * FROM data', conn)
+        except:
+            data = fetch_all()
+            df = pd.DataFrame(list(data.items()), columns=['Indicator', 'Value'])
+            df.to_sql('data', conn, if_exists='replace', index=False)
 
-# Unpack values for display
-df_expanded = pd.DataFrame({
-    'Indicator': df['Indicator'],
-    'Previous': df['Value'].apply(lambda x: x[0] if isinstance(x, list) and len(x) > 0 else np.nan),
-    'Current': df['Value'].apply(lambda x: x[1] if isinstance(x, list) and len(x) > 1 else np.nan),
-    'Forecast': df['Value'].apply(lambda x: x[2] if isinstance(x, list) and len(x) > 2 else np.nan),
-    'Threshold': df['Indicator'].apply(lambda x: indicators.get(x, {}).get('thresh', np.nan)),
-    'Unit': df['Indicator'].apply(lambda x: indicators.get(x, {}).get('unit', 'N/A')),
-    'Description': df['Indicator'].apply(lambda x: indicators.get(x, {}).get('desc', 'N/A'))
-})
+    col1, col2 = st.columns(2)
 
-col1, col2 = st.columns(2)
+    with col1:
+        st.subheader('Risks/Cycles Viz')
+        for _, row in df.iterrows():
+            thresh = indicators.get(row['Indicator'], {}).get('thresh', np.nan)
+            value = row['Value'] if isinstance(row['Value'], (int, float)) else np.nan
+            if np.isnan(value):
+                continue  # Skip errors/NaN
+            color = 'red' if not np.isnan(thresh) and value > thresh else 'green'
+            fig = px.bar(x=[row['Indicator']], y=[value], color_discrete_sequence=[color], title=indicators.get(row['Indicator'], {}).get('desc', ''))
+            st.plotly_chart(fig, use_container_width=True)
 
-with col1:
-    st.subheader('Indicators Visualization')
-    for index, row in df_expanded.iterrows():
-        if not np.isnan(row['Current']):
-            values = [row['Previous'], row['Current'], row['Forecast']]
-            fig = px.bar(x=['Previous', 'Current', 'Forecast'], y=values, title=row['Description'],
-                         color_discrete_sequence=['blue', 'green', 'orange'] if not np.isnan(row['Threshold']) and row['Current'] <= row['Threshold'] else ['blue', 'red', 'orange'])
-            fig.update_traces(hovertemplate='Value: %{y} %{text}<extra></extra>', text=[f"{v} {row['Unit']}" if not np.isnan(v) else 'N/A' for v in values])
-            st.plotly_chart(fig, use_container_width=True, key=f"plotly_chart_{row['Indicator']}_{index}")
+    with col2:
+        st.dataframe(df)
 
-with col2:
-    st.subheader('Indicators Table')
-    st.dataframe(df_expanded)
+with tab2:
+    st.subheader('Risks Table')
+    st.dataframe(pd.DataFrame(risks))
