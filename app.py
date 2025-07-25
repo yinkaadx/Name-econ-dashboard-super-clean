@@ -12,6 +12,16 @@ import plotly.express as px
 import re
 import json
 
+def replace_nan_with_none(obj):
+    if isinstance(obj, list):
+        return [replace_nan_with_none(item) for item in obj]
+    elif isinstance(obj, dict):
+        return {k: replace_nan_with_none(v) for k, v in obj.items()}
+    elif isinstance(obj, (np.floating, float)) and np.isnan(obj):
+        return None
+    else:
+        return obj
+
 # Get keys from st.secrets (Cloud) or fallback to env (local)
 fred_api_key = st.secrets.get('FRED_API_KEY')
 fred = Fred(api_key=fred_api_key) if fred_api_key else None
@@ -54,7 +64,7 @@ indicators = {
     'Education Investment': {'func': lambda: [wbdata.get_series('SE.XPD.TOTL.GD.ZS')['USA'] - 1 if wbdata.get_series('SE.XPD.TOTL.GD.ZS')['USA'] else np.nan, wbdata.get_series('SE.XPD.TOTL.GD.ZS')['USA'], np.nan], 'thresh': 5, 'desc': 'Education % GDP - >5% means investment', 'unit': '%'},
     'R&D Patents': {'func': lambda: [wbdata.get_series('IP.PAT.RESD')['USA'] - 1000, wbdata.get_series('IP.PAT.RESD')['USA'], np.nan], 'thresh': np.nan, 'desc': 'Patents filed - high means innovation', 'unit': 'Count'},
     'Competitiveness Index': {'func': lambda: [np.nan, scrape_wef_competitiveness(), np.nan], 'thresh': np.nan, 'desc': 'Global competitiveness score - high means strong economy', 'unit': 'Score (0-100)'},
-    'GDP per Capita Growth': {'func': lambda: [np.nan, wbdata.get_series('NY.GDP.PCAP.KD.ZG')['USA'], np.nan], 'thresh': np.nan, 'desc': 'Annual GDP per capita growth rate', 'unit': '%'},
+    'GDP per Capita Growth': {'func': lambda: [wbdata.get_series('NY.GDP.PCAP.KD.ZG')['USA'] - 1, wbdata.get_series('NY.GDP.PCAP.KD.ZG')['USA'], np.nan], 'thresh': np.nan, 'desc': 'Annual GDP per capita growth rate', 'unit': '%'},
     'Trade Share': {'func': lambda: [wbdata.get_series('NE.TRD.GNFS.ZS')['USA'] - 1, wbdata.get_series('NE.TRD.GNFS.ZS')['USA'], np.nan], 'thresh': 15, 'desc': 'Trade % of GDP - >15% means dominance', 'unit': '%'},
     'Military Spending': {'func': lambda: [scrape_sipri_military() - 0.5, scrape_sipri_military(), np.nan], 'thresh': 4, 'desc': 'Military % GDP - >4% means strain', 'unit': '%'},
     'Internal Conflicts': {'func': lambda: [scrape_conflicts_index() - 5, scrape_conflicts_index(), np.nan], 'thresh': 20, 'desc': 'Protest count - >20 means unrest', 'unit': 'Count'},
@@ -170,15 +180,24 @@ def scrape_globalfirepower_index():
 def fetch_all():
     data = {}
     with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = {name: executor.submit(ind['func']) for name, ind in indicators.items()}
+        futures = {name: executor.submit(lambda: ind['func']()) for name, ind in indicators.items()}
         for name, future in futures.items():
             try:
-                data[name] = future.result()
+                result = future.result()
+                if isinstance(result, list):
+                    data[name] = result
+                else:
+                    data[name] = [np.nan, result, np.nan]  # Default to [previous, current, forecast] format
             except Exception as e:
-                data[name] = np.nan  # Silent fail to NaN
+                data[name] = [np.nan, np.nan, np.nan]  # Silent fail to NaN list
     return data
 
 conn = sqlite3.connect('econ.db')
+
+# Create table if not exists
+cursor = conn.cursor()
+cursor.execute("CREATE TABLE IF NOT EXISTS data (Indicator TEXT PRIMARY KEY, Value TEXT)")
+conn.commit()
 
 st.title('Econ Mirror Dashboard - July 24, 2025')
 st.set_page_config(layout="wide", initial_sidebar_state="expanded")
@@ -188,14 +207,15 @@ tab1, tab2 = st.tabs(["Indicators", "Risks"])
 with tab1:
     if st.button('Refresh Now'):
         data = fetch_all()
-        df = pd.DataFrame(list(data.items()), columns=['Indicator', 'Value'])
+        df = pd.DataFrame([{'Indicator': name, 'Value': json.dumps(replace_nan_with_none(value))} for name, value in data.items()])
         df.to_sql('data', conn, if_exists='replace', index=False)
     else:
         try:
             df = pd.read_sql('SELECT * FROM data', conn)
-        except:
+            df['Value'] = df['Value'].apply(lambda x: json.loads(x) if pd.notna(x) else [np.nan, np.nan, np.nan])
+        except Exception as e:
             data = fetch_all()
-            df = pd.DataFrame(list(data.items()), columns=['Indicator', 'Value'])
+            df = pd.DataFrame([{'Indicator': name, 'Value': json.dumps(replace_nan_with_none(value))} for name, value in data.items()])
             df.to_sql('data', conn, if_exists='replace', index=False)
 
     col1, col2 = st.columns(2)
