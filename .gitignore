@@ -1,12 +1,29 @@
-".env" # Ignore Node.js dependencies
-node_modules/
-heroku/client/node_modules/
-.yarn/
+# Streamlit secrets
+.streamlit/secrets.toml
 
-# Ignore Windows system files
-desktop.ini
-Thumbs.db
-
-# Ignore other junk (if you have CSVs or env)
+# Environment
 .env
-data/*.csv  # If you have local CSVs, add this
+venv/
+*.pyc
+*.pyo
+*.pyd
+*.pyz
+__pycache__/
+*.egg-info/
+
+# Keys/credentials
+*.key
+*.pem
+*.ppk
+*.toml (except if needed)
+
+# Logs/temp
+*.log
+*.tmp
+*.cache
+
+app.py.bak
+bfg-1.15.0.jar
+desktop.ini
+heroku/client/
+requirements.txt.txt
